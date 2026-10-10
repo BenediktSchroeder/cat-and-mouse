@@ -13,6 +13,7 @@ traffic. The page is static and runs on GitHub Pages without a build step.
 3. Click a card and then where it should go, or drag it there. Double-clicking a
    number card plays it onto the first building pile it fits. To discard a set, click
    each of its cards in your hand, then click a discard pile or drag the set there.
+   The speaker in the top corner of the table turns the sounds on and off.
 
 The browser that created the game hosts it and keeps it in its local storage, so
 either player can reload the page or lose the connection and carry on where they left off.
@@ -57,6 +58,7 @@ second one.
 - `js/net.js`: the PeerJS connection between host and guest
 - `js/ice-servers.js`: the STUN and TURN servers, with the Metered TURN credential
 - `js/ui.js`: rendering, input and animations
+- `js/sound.js`: sound effects, synthesised with the Web Audio API
 - `js/main.js`: lobby and the host and guest sessions
 
 ## Hosting on GitHub Pages

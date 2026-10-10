@@ -4,13 +4,19 @@
 // in `data-card`, so cards that exist before and after a rebuild are animated from
 // their old position to the new one (FLIP). Cards that appear out of a hidden place,
 // such as the draw pile or the opponent's hand, start from that place's `data-zone`.
+// Each event's sound starts with its animation.
 
 import { JOKER, TOP_VALUE, fitsOnBuildPile } from './game.js';
+import * as sound from './sound.js';
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 // A discard pile fans out downwards by at most this share of a card height per card.
 const MAX_FAN = 0.24;
+
+// The easing of a card's flight brings it within a few pixels of its place after this
+// share of the animation, which is when it is heard landing.
+const LANDING = 0.55;
 
 function fanFor(count, spread) {
   return count > 1 ? Math.min(MAX_FAN, spread / (count - 1)) : 0;
@@ -62,6 +68,40 @@ function centerOf(rect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
+const SPEAKER = '<path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor"/>';
+const WAVES = '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+const CROSS = '<path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+
+function showSoundState(button) {
+  const on = sound.isOn();
+  button.setAttribute('aria-pressed', String(on));
+  button.title = on ? 'Mute sounds' : 'Turn sounds on';
+  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPEAKER}${on ? WAVES : CROSS}</svg>`;
+}
+
+/** The sound of an event as player `you` hears it, if any. */
+function soundOf(ev, you) {
+  switch (ev.kind) {
+    case 'play':
+    case 'discard':
+      return 'place';
+    case 'draw':
+      return 'take';
+    case 'joker':
+      return 'joker';
+    case 'complete':
+      return 'complete';
+    case 'reshuffle':
+      return 'shuffle';
+    case 'turn':
+      return ev.player === you ? 'turn' : null;
+    case 'win':
+      return ev.player === you ? 'win' : 'lose';
+    default:
+      return null;
+  }
+}
+
 export class Board {
   constructor(root, { onAction, onMessage }) {
     this.root = root;
@@ -90,8 +130,22 @@ export class Board {
     this.selection = null;
     this.root.replaceChildren(this.#render(view));
     this.#fitDiscards();
-    if (reducedMotion.matches || !before.cards.size) return 0;
+    if (reducedMotion.matches || !before.cards.size) {
+      this.#playSounds(events);
+      return 0;
+    }
     return this.#animate(events, before);
+  }
+
+  /** The sounds of events shown without animation, spaced like a quick deal. */
+  #playSounds(events) {
+    let clock = 0;
+    for (const ev of events) {
+      const name = soundOf(ev, this.view.you);
+      if (!name) continue;
+      sound.play(name, clock);
+      clock += ev.kind === 'draw' ? 110 : 200;
+    }
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -122,9 +176,17 @@ export class Board {
         h('span', { class: 'seat__meta' }, stockLabel),
         active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
         mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
+        // The top corner of the table is free on every screen, unlike the top bar, which phones hide.
+        mine ? null : this.#soundToggle(),
       ),
       mine ? [piles, this.#hand(player, p, canAct)] : [this.#hiddenHand(player, p), piles],
     );
+  }
+
+  #soundToggle() {
+    const button = h('button', { class: 'sound-toggle', type: 'button', 'aria-label': 'Sound', 'data-sound-toggle': true });
+    showSoundState(button);
+    return button;
   }
 
   #stock(player, p, canAct) {
@@ -291,6 +353,7 @@ export class Board {
     // The hint can take a line of its own, which comes out of the room for the discard piles.
     this.#fitDiscards();
     if (!selection) return;
+    sound.play('pick');
     for (const el of this.#sourceElements(selection)) el.classList.add('is-selected');
     for (const target of this.root.querySelectorAll('[data-target]')) {
       if (this.#fits(selection, target)) target.classList.add('is-target');
@@ -333,6 +396,12 @@ export class Board {
   #click(e) {
     // The click that ends a drag is not a selection.
     if (performance.now() - this.dragEndedAt < 100) return;
+    const toggle = e.target.closest('[data-sound-toggle]');
+    if (toggle) {
+      sound.setOn(!sound.isOn());
+      showSoundState(toggle);
+      return sound.play('pick');
+    }
     if (e.target.closest('[data-end-turn]')) return this.onAction({ type: 'endTurn' });
     const target = e.target.closest('[data-target]');
     if (this.selection && target && this.#fits(this.selection, target)) return this.#perform(target);
@@ -434,7 +503,13 @@ export class Board {
 
   /** The last action was refused: cards waiting for the next view go back at once. */
   reject() {
+    sound.play('refuse');
     this.#clearDropped();
+  }
+
+  #refuse(message) {
+    sound.play('refuse');
+    this.onMessage(message);
   }
 
   #clearDropped() {
@@ -451,15 +526,15 @@ export class Board {
     this.#select(null);
     if (target.dataset.target === 'build') {
       if (selection.from === 'hand' && selection.cards.length > 1) {
-        return this.onMessage('A set of cards can only be discarded. Play them one by one instead.');
+        return this.#refuse('A set of cards can only be discarded. Play them one by one instead.');
       }
       if (!fitsOnBuildPile(this.#valueOf(selection), this.view.build[pile].length)) {
-        return this.onMessage(`This building pile needs a ${this.view.build[pile].length + 1} or a joker.`);
+        return this.#refuse(`This building pile needs a ${this.view.build[pile].length + 1} or a joker.`);
       }
       const source = selection.from === 'hand' ? { from: 'hand', card: selection.cards[0] } : selection;
       return this.onAction({ type: 'play', ...source, to: pile });
     }
-    if (selection.from !== 'hand') return this.onMessage('Only cards from your hand can be discarded.');
+    if (selection.from !== 'hand') return this.#refuse('Only cards from your hand can be discarded.');
     this.onAction({ type: 'discard', cards: selection.cards, pile });
   }
 
@@ -504,14 +579,20 @@ export class Board {
     }
     const backsTaken = new Map();
     let clock = 0;
+    // The result of the game sounds once everything has settled, as it is announced.
+    let result = null;
 
     for (const ev of events) {
+      const name = soundOf(ev, this.view.you);
       if (ev.kind === 'complete') {
         const slot = this.root.querySelector(`[data-zone="build:${ev.pile}"]`);
         slot?.animate([{ boxShadow: '0 0 0 0 var(--glow)' }, { boxShadow: '0 0 40px 10px var(--glow)' }, { boxShadow: '0 0 0 0 var(--glow)' }],
           { duration: 900, delay: clock + 250 });
+        sound.play(name, clock + 250);
         continue;
       }
+      if (ev.kind === 'win') result = name;
+      else if (!ev.from && name) sound.play(name, clock);
       if (!ev.from) continue;
 
       const id = ev.card ? String(ev.card.id) : null;
@@ -535,6 +616,14 @@ export class Board {
       } else if (ev.card) {
         ghost(ev.card, from, this.#cardRectIn(this.#zoneNow(ev.to)), delay, duration);
       }
+      if (joker) {
+        // A joker sounds as it lights up, then slides into the hand, which its
+        // animation in flip() does from 30% to 85% of its length.
+        sound.play(name, delay);
+        sound.play('take', delay + (duration + 450) * 0.3, (duration + 450) * 0.55);
+      } else {
+        sound.play(name, delay, duration * LANDING);
+      }
       clock = delay + ({ draw: 110, discard: 150 }[ev.kind] ?? duration * 0.75);
     }
 
@@ -544,7 +633,9 @@ export class Board {
       const from = before.cards.get(el.dataset.card);
       if (from) flip(el, from, 0, 280, false);
     }
-    return clock + 400;
+    const end = clock + 400;
+    if (result) sound.play(result, end);
+    return end;
   }
 }
 

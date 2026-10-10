@@ -264,6 +264,28 @@ body {
 
 .seat__hint { color: var(--gold); font-size: 14px; }
 
+/* The negative margins keep the button from making the label any taller than its text. */
+.sound-toggle {
+  --size: 30px;
+  align-self: center;
+  margin: calc((var(--size) - 18px) / -2) 0 calc((var(--size) - 18px) / -2) auto;
+  display: grid;
+  place-items: center;
+  width: var(--size);
+  height: var(--size);
+  padding: 0;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sound-toggle:hover { color: var(--ink); background: rgba(255, 255, 255, 0.1); }
+.sound-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.sound-toggle svg { width: 60%; height: 60%; }
+
 .seat__piles {
   display: flex;
   align-items: flex-start;
@@ -635,6 +657,7 @@ body {
   .seat__name { font-size: 16px; }
   .seat__turn { font-size: 11px; padding: 1px 8px; }
   .seat__hint { flex-basis: 100%; font-size: 12px; line-height: 1.25; white-space: normal; }
+  .sound-toggle { --size: 26px; }
 
   .center { gap: calc(var(--cw) * 0.35); padding-bottom: 16px; }
 
