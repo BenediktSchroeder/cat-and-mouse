@@ -9,6 +9,13 @@ import { JOKER, TOP_VALUE, fitsOnBuildPile } from './game.js';
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
+// A discard pile fans out downwards by at most this share of a card height per card.
+const MAX_FAN = 0.24;
+
+function fanFor(count, spread) {
+  return count > 1 ? Math.min(MAX_FAN, spread / (count - 1)) : 0;
+}
+
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -45,6 +52,12 @@ function backEl(attrs = {}) {
   return h('div', { class: 'card card--back', ...attrs }, h('span', { class: 'card__mark' }));
 }
 
+/** Gives a seat's discard piles `spread` card heights to fan out over, beyond the height of one card. */
+function spreadDiscards(row, spread) {
+  row.style.setProperty('--spread', spread);
+  for (const slot of row.children) slot.style.setProperty('--fan', fanFor(slot.querySelectorAll('.card').length, spread));
+}
+
 function centerOf(rect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
@@ -62,6 +75,7 @@ export class Board {
     root.addEventListener('dblclick', (e) => this.#doubleClick(e));
     root.addEventListener('pointerdown', (e) => this.#pointerDown(e));
     document.addEventListener('keydown', (e) => e.key === 'Escape' && this.#select(null));
+    window.addEventListener('resize', () => this.#fitDiscards());
   }
 
   get myTurn() {
@@ -75,6 +89,7 @@ export class Board {
     this.view = view;
     this.selection = null;
     this.root.replaceChildren(this.#render(view));
+    this.#fitDiscards();
     if (reducedMotion.matches || !before.cards.size) return 0;
     return this.#animate(events, before);
   }
@@ -125,11 +140,9 @@ export class Board {
 
   #discardPile(pile, p, i, mine, canAct) {
     // The pile fans out downwards, its bottom card highest up and furthest behind;
-    // the more cards, the tighter.
-    const fan = pile.length > 1 ? Math.min(0.24, 0.6 / (pile.length - 1)) : 0;
+    // #fitDiscards sets how far.
     return h('div', {
       class: 'slot slot--discard',
-      style: `--fan:${fan}`,
       'data-zone': `discard:${p}:${i}`,
       'data-target': canAct ? 'discard' : null,
       'data-pile': i,
@@ -142,6 +155,40 @@ export class Board {
       })),
       pile.length ? null : h('span', { class: 'slot__hint' }, mine ? 'discard' : ''),
     );
+  }
+
+  /**
+   * Each seat grows with its longest discard pile into the free space between it and
+   * the middle of the table. A pile that needs more room than that fans tighter. When
+   * both seats need more than there is, each gets half, plus what the other leaves.
+   */
+  #fitDiscards() {
+    const table = this.root.querySelector('.table');
+    const center = table?.querySelector('.center');
+    const rows = [...(table?.querySelectorAll('.discards') ?? [])];
+    if (!center || !rows.length) return;
+    for (const row of rows) spreadDiscards(row, 0);
+
+    const cardHeight = rows[0].firstElementChild.getBoundingClientRect().height;
+    if (!cardHeight) return;
+    // The table spaces its rows apart, so all room beyond its gaps is free.
+    const gap = parseFloat(getComputedStyle(table).rowGap) || 0;
+    const middle = center.getBoundingClientRect();
+    let free = 0;
+    for (const seat of table.querySelectorAll('.seat')) {
+      const rect = seat.getBoundingClientRect();
+      free += Math.max(0, (rect.bottom <= middle.top ? middle.top - rect.bottom : rect.top - middle.bottom) - gap);
+    }
+
+    const needs = rows.map((row) => {
+      const longest = Math.max(...[...row.children].map((slot) => slot.querySelectorAll('.card').length));
+      return { row, need: Math.max(0, MAX_FAN * (longest - 1)) * cardHeight };
+    }).sort((a, b) => a.need - b.need);
+    needs.forEach(({ row, need }, i) => {
+      const room = Math.min(need, Math.floor(free / (needs.length - i)));
+      free -= room;
+      spreadDiscards(row, room / cardHeight);
+    });
   }
 
   #hand(player, p, canAct) {
@@ -241,6 +288,8 @@ export class Board {
       el.classList.remove('is-selected', 'is-target', 'is-hovered');
     }
     this.#showSetHint(selection);
+    // The hint can take a line of its own, which comes out of the room for the discard piles.
+    this.#fitDiscards();
     if (!selection) return;
     for (const el of this.#sourceElements(selection)) el.classList.add('is-selected');
     for (const target of this.root.querySelectorAll('[data-target]')) {
