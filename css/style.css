@@ -35,7 +35,7 @@ body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
   font-family: 'Fredoka', system-ui, sans-serif;
   color: var(--ink);
   background:
@@ -595,6 +595,33 @@ body {
 
 @keyframes fade-in {
   from { opacity: 0; }
+}
+
+/* ---- phones ------------------------------------------------------------------- */
+
+/* The widest row is the hand with its eight card widths, so on a phone the card size
+   follows the screen width, and the space around the piles shrinks to what the
+   cards need. */
+@media (max-width: 600px) {
+  :root { --cw: clamp(34px, min((100vw - 24px) / 8.1, 8vh), 96px); }
+
+  .topbar { display: none; }
+
+  .table { gap: 6px; padding: 6px 6px 8px; }
+
+  .seat { gap: 4px; padding: 4px 4px 6px; border-radius: 12px; }
+
+  /* The set hint takes a line of its own, so it leaves the rest of the label alone. */
+  .seat__label { flex-wrap: wrap; gap: 0 8px; font-size: 13px; padding: 0 4px; white-space: nowrap; }
+  .seat__name { font-size: 16px; }
+  .seat__turn { font-size: 11px; padding: 1px 8px; }
+  .seat__hint { flex-basis: 100%; font-size: 12px; line-height: 1.25; white-space: normal; }
+
+  .center { gap: calc(var(--cw) * 0.35); padding-bottom: 16px; }
+
+  .slot__caption { font-size: 11px; top: calc(100% + 2px); }
+
+  .badge { min-width: 20px; height: 20px; border-radius: 10px; font-size: 12px; padding: 0 5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
