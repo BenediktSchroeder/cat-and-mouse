@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cat & Mouse</title>
+  <meta name="description" content="A card game for two, played directly between two browsers.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 140'><rect x='4' y='4' width='92' height='132' rx='14' fill='%23fbf6ea' stroke='%23d9483b' stroke-width='6'/><text x='50' y='96' font-size='72' text-anchor='middle' fill='%23d9483b' font-family='sans-serif' font-weight='700'>★</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Fredoka:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">Cat <span>&amp;</span> Mouse</h1>
+    <p class="status" id="status" data-tone="neutral"></p>
+    <button class="button button--quiet" id="invite-button" hidden>Copy invite link</button>
+  </header>
+
+  <main class="stage">
+    <section id="lobby" class="lobby"></section>
+    <section id="board" class="board" hidden></section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="panel panel--result">
+      <h2 id="overlay-title"></h2>
+      <p id="overlay-text"></p>
+      <button class="button button--primary" id="again">Play again</button>
+    </div>
+  </div>
+
+  <template id="rules-template">
+    <details class="rules">
+      <summary>How to play</summary>
+      <ul>
+        <li>Empty your stock pile first to win. Each stock starts with 30 cards; its top card is face up.</li>
+        <li>The four building piles in the middle are shared. Each starts with a 1 and climbs to 12, then it is cleared.
+          Jokers (★) stand for any number.</li>
+        <li>At the start of your turn you draw up to five cards. If your hand is empty during your turn, you draw five more.</li>
+        <li>Play from your hand, the top of your stock, or the top of your four discard piles. End your turn by
+          discarding one hand card onto one of your discard piles.</li>
+        <li><strong>House rule:</strong> a joker that turns up on top of your stock goes straight into your hand,
+          even if you already hold five or more cards. With five or more cards you draw nothing at the start of your turn.
+          At the very start of the game you get your five cards plus the joker.</li>
+        <li><strong>House rule:</strong> you may end your turn by discarding several cards of the same number
+          together onto one discard pile. Jokers can be discarded together too, but never mixed with numbers.</li>
+      </ul>
+      <p class="hint">Click a card and then its destination, or drag it there. Double-click a number card to play
+        it onto the first pile it fits. To discard a set, click all its cards in your hand, then a discard pile.</p>
+    </details>
+  </template>
+</body>
+</html>

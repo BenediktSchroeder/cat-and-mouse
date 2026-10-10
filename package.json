@@ -1,0 +1,9 @@
+{
+  "name": "cat-and-mouse",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes http-server@14.1.1 -c-1 -p 8080 .",
+    "test": "node --test"
+  }
+}
