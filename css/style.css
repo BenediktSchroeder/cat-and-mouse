@@ -364,7 +364,9 @@ body {
 
 .slot--stock .card, .slot--build .card, .slot--draw .card, .slot--done .card { position: absolute; inset: 0; }
 
-.slot.is-stacked > .card {
+/* The lowest card of a slot draws the edges of the stack, so they stay in place while
+   a card flies onto or off the top. */
+.slot.is-stacked > .card:first-child {
   box-shadow:
     1px 1px 0 var(--paper-edge),
     3px 3px 0 #c9bc9f,

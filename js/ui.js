@@ -171,15 +171,20 @@ export class Board {
         h('span', { class: 'slot__caption' }, 'Draw pile'),
       ),
       h('div', { class: 'builds' }, v.build.map((pile, i) => {
+        // The card beneath the top is shown too, so a card played onto the pile
+        // lands on it instead of covering an empty slot.
         const top = pile.at(-1);
+        const below = pile.length > 1 ? pile.at(-2) : null;
+        const jokerLabel = (card, size) => (card.v === JOKER ? size : null);
         return h('div', {
           class: `slot slot--build ${pile.length > 1 ? 'is-stacked' : ''}`,
           'data-zone': `build:${i}`,
           'data-target': myTurn ? 'build' : null,
           'data-pile': i,
         },
+          below ? cardEl(below, { standsFor: jokerLabel(below, pile.length - 1) }) : null,
           top
-            ? cardEl(top, { standsFor: top.v === JOKER ? pile.length : null })
+            ? cardEl(top, { standsFor: jokerLabel(top, pile.length) })
             : h('span', { class: 'slot__hint' }, '1'),
           h('span', { class: 'slot__caption' }, pile.length < TOP_VALUE ? `next: ${pile.length + 1}` : ''),
         );
