@@ -259,6 +259,7 @@ function joinAsGuest(code, name) {
         connected: ['Connected', 'good'],
         reconnecting: ['Connection lost, reconnecting…', 'warn'],
         'host-away': ['The host is offline. Retrying…', 'warn'],
+        unreachable: ['Cannot reach the host’s browser. Retrying…', 'warn'],
       }[status];
       setStatus(...text);
       if (!started && status !== 'connected') {

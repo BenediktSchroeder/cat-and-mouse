@@ -2,7 +2,9 @@
 
 A card game for two players in the browser. The two browsers talk to each other directly
 over WebRTC ([PeerJS](https://peerjs.com/)); the public PeerJS server only introduces
-them to each other. The page is static and runs on GitHub Pages without a build step.
+them to each other. Where they cannot reach each other directly, for example on guest
+Wi-Fi or mobile data, a [Metered](https://www.metered.ca/) TURN server relays their
+traffic. The page is static and runs on GitHub Pages without a build step.
 
 ## Playing
 
@@ -53,6 +55,7 @@ second one.
 
 - `js/game.js`: the rules engine, free of any browser API
 - `js/net.js`: the PeerJS connection between host and guest
+- `js/ice-servers.js`: the STUN and TURN servers, with the Metered TURN credential
 - `js/ui.js`: rendering, input and animations
 - `js/main.js`: lobby and the host and guest sessions
 

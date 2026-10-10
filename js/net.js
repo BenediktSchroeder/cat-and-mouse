@@ -6,6 +6,9 @@
 // WebRTC can take a long time to notice a vanished peer on its own, and a stale
 // connection would keep a returning guest out.
 
+import { ICE_SERVERS } from './ice-servers.js';
+
+const PEER_OPTIONS = { config: { iceServers: ICE_SERVERS } };
 const PEER_PREFIX = 'cat-and-mouse-';
 const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const PING_INTERVAL = 3000;
@@ -52,7 +55,7 @@ export class HostLink {
   }
 
   start() {
-    const peer = new Peer(PEER_PREFIX + this.code);
+    const peer = new Peer(PEER_PREFIX + this.code, PEER_OPTIONS);
     this.peer = peer;
     peer.on('open', () => {
       this.attempts = 0;
@@ -117,7 +120,7 @@ export class GuestLink {
 
   start() {
     this.onStatus('connecting');
-    const peer = new Peer();
+    const peer = new Peer(PEER_OPTIONS);
     this.peer = peer;
     peer.on('open', () => this.#connect());
     peer.on('disconnected', () => {
@@ -150,8 +153,11 @@ export class GuestLink {
       return this.#retry();
     }
     const conn = this.peer.connect(PEER_PREFIX + this.code, { reliable: true });
+    // The host is registered but its browser cannot be reached, which happens
+    // when neither a direct path nor the TURN relay works.
     const giveUp = setTimeout(() => {
       conn.close();
+      this.onStatus('unreachable');
       this.#retry();
     }, 15000);
     conn.on('open', () => {
