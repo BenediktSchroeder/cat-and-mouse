@@ -284,16 +284,17 @@ export class Board {
         // lands on it instead of covering an empty slot.
         const top = pile.at(-1);
         const below = pile.length > 1 ? pile.at(-2) : null;
-        const jokerLabel = (card, size) => (card.v === JOKER ? size : null);
+        // Only the top card is labelled: the label sticks out over the card's
+        // corner, so on the card beneath it would show past the top card.
         return h('div', {
           class: `slot slot--build ${pile.length > 1 ? 'is-stacked' : ''}`,
           'data-zone': `build:${i}`,
           'data-target': myTurn ? 'build' : null,
           'data-pile': i,
         },
-          below ? cardEl(below, { standsFor: jokerLabel(below, pile.length - 1) }) : null,
+          below ? cardEl(below) : null,
           top
-            ? cardEl(top, { standsFor: jokerLabel(top, pile.length) })
+            ? cardEl(top, { standsFor: top.v === JOKER ? pile.length : null })
             : h('span', { class: 'slot__hint' }, '1'),
           h('span', { class: 'slot__caption' }, pile.length < TOP_VALUE ? `next: ${pile.length + 1}` : ''),
         );
