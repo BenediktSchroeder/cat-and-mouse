@@ -11,16 +11,9 @@ import * as sound from './sound.js';
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-// A discard pile fans out downwards by at most this share of a card height per card.
-const MAX_FAN = 0.24;
-
 // The easing of a card's flight brings it within a few pixels of its place after this
 // share of the animation, which is when it is heard landing.
 const LANDING = 0.55;
-
-function fanFor(count, spread) {
-  return count > 1 ? Math.min(MAX_FAN, spread / (count - 1)) : 0;
-}
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -56,12 +49,6 @@ export function cardEl(card, { attrs = {}, standsFor = null, extraClass = '' } =
 
 function backEl(attrs = {}) {
   return h('div', { class: 'card card--back', ...attrs }, h('span', { class: 'card__mark' }));
-}
-
-/** Gives a seat's discard piles `spread` card heights to fan out over, beyond the height of one card. */
-function spreadDiscards(row, spread) {
-  row.style.setProperty('--spread', spread);
-  for (const slot of row.children) slot.style.setProperty('--fan', fanFor(slot.querySelectorAll('.card').length, spread));
 }
 
 function centerOf(rect) {
@@ -131,7 +118,6 @@ export class Board {
     root.addEventListener('dblclick', (e) => this.#doubleClick(e));
     root.addEventListener('pointerdown', (e) => this.#pointerDown(e));
     document.addEventListener('keydown', (e) => e.key === 'Escape' && this.#select(null));
-    window.addEventListener('resize', () => this.#fitDiscards());
   }
 
   get myTurn() {
@@ -141,11 +127,12 @@ export class Board {
   /** Shows a new view and returns the time in ms until its animations have played. */
   update(view, events = []) {
     const before = this.#measure();
+    const scrolled = this.#discardScrolls();
     this.#clearDropped();
     this.view = view;
     this.selection = null;
     this.root.replaceChildren(this.#render(view));
-    this.#fitDiscards();
+    this.#scrollDiscards(scrolled, events);
     if (reducedMotion.matches || !before.cards.size) {
       this.#playSounds(events);
       return 0;
@@ -196,7 +183,8 @@ export class Board {
     const stockLabel = player.stockCount === 1 ? '1 card left in stock' : `${player.stockCount} cards left in stock`;
     const piles = h('div', { class: 'seat__piles' },
       this.#stock(player, p, canAct),
-      h('div', { class: 'discards' }, player.discards.map((pile, i) => this.#discardPile(pile, p, i, mine, canAct))),
+      h('div', { class: 'discards', 'data-discards': p },
+        h('div', { class: 'discards__piles' }, player.discards.map((pile, i) => this.#discardPile(pile, p, i, mine, canAct)))),
     );
     // Each hand sits at the edge of the table on its player's side.
     return h('section', { class: `seat ${mine ? 'seat--me' : 'seat--opponent'} ${active ? 'is-active' : ''}` },
@@ -245,10 +233,10 @@ export class Board {
   }
 
   #discardPile(pile, p, i, mine, canAct) {
-    // The pile fans out downwards, its bottom card highest up and furthest behind;
-    // #fitDiscards sets how far.
+    // The pile fans out downwards, its bottom card highest up and furthest behind.
     return h('div', {
       class: 'slot slot--discard',
+      style: `--covered:${Math.max(0, pile.length - 1)}`,
       'data-zone': `discard:${p}:${i}`,
       'data-target': canAct ? 'discard' : null,
       'data-pile': i,
@@ -264,31 +252,31 @@ export class Board {
   }
 
   /**
-   * Each seat grows with its longest discard pile into the free space between it and
-   * the middle of the table, which stays in place. A pile that needs more room than
-   * that fans tighter.
+   * How far each seat's discard piles are scrolled up from their end, by seat. The piles
+   * end together at the bottom, where the cards that can be played lie, so it is this
+   * distance that stays the same while they grow and shrink.
    */
-  #fitDiscards() {
-    const table = this.root.querySelector('.table');
-    const center = table?.querySelector('.center');
-    const seats = [...(table?.querySelectorAll('.seat') ?? [])];
-    if (!center || !seats.length) return;
-    for (const seat of seats) spreadDiscards(seat.querySelector('.discards'), 0);
+  #discardScrolls() {
+    return new Map([...this.root.querySelectorAll('[data-discards]')]
+      .map((el) => [el.dataset.discards, el.scrollHeight - el.clientHeight - el.scrollTop]));
+  }
 
-    const cardHeight = seats[0].querySelector('.slot--discard').getBoundingClientRect().height;
-    if (!cardHeight) return;
-    // Each seat keeps to the edge of its half of the table, so all room between it and
-    // the middle, beyond the table's gap, is free.
-    const gap = parseFloat(getComputedStyle(table).rowGap) || 0;
-    const middle = center.getBoundingClientRect();
-    const rooms = seats.map((seat) => {
-      const rect = seat.getBoundingClientRect();
-      const free = Math.max(0, (rect.bottom <= middle.top ? middle.top - rect.bottom : rect.top - middle.bottom) - gap);
-      const row = seat.querySelector('.discards');
-      const longest = Math.max(...[...row.children].map((slot) => slot.querySelectorAll('.card').length));
-      return { row, room: Math.floor(Math.min(free, Math.max(0, MAX_FAN * (longest - 1)) * cardHeight)) };
-    });
-    for (const { row, room } of rooms) spreadDiscards(row, room / cardHeight);
+  /**
+   * The discard piles of a new view stay scrolled as they were, at first right down to
+   * their end, except that a card just discarded is brought to the middle of its seat's
+   * piles, as far as they scroll.
+   */
+  #scrollDiscards(scrolled, events) {
+    for (const el of this.root.querySelectorAll('[data-discards]')) {
+      el.scrollTop = el.scrollHeight - el.clientHeight - (scrolled.get(el.dataset.discards) ?? 0);
+    }
+    const discarded = events.findLast((ev) => ev.kind === 'discard');
+    const card = discarded && [...this.root.querySelectorAll(`[data-zone="${discarded.to}"] .card`)].at(-1);
+    const section = card?.closest('[data-discards]');
+    if (!section) return;
+    const box = section.getBoundingClientRect();
+    const { y } = centerOf(card.getBoundingClientRect());
+    section.scrollTop += y - (box.top + box.height / 2);
   }
 
   #hand(player, p, canAct) {
@@ -389,8 +377,6 @@ export class Board {
       el.classList.remove('is-selected', 'is-target', 'is-hovered');
     }
     this.#showSetHint(selection);
-    // The hint can take a line of its own, which comes out of the room for the discard piles.
-    this.#fitDiscards();
     if (!selection) return;
     sound.play('pick');
     for (const el of this.#sourceElements(selection)) el.classList.add('is-selected');
@@ -654,7 +640,7 @@ export class Board {
       const delay = clock + (joker ? 250 : 0);
       if (el && !moved.has(el)) {
         moved.add(el);
-        flip(el, from, delay, duration, joker);
+        flip(el, from, delay, duration, joker, ev.to.startsWith('discard:'));
       } else if (ev.card) {
         ghost(ev.card, from, this.#cardRectIn(this.#zoneNow(ev.to)), delay, duration);
       }
@@ -681,7 +667,12 @@ export class Board {
   }
 }
 
-function flip(el, from, delay, duration, glow) {
+/**
+ * Moves `el` from `from` into its place. A card arriving in a seat's discard piles
+ * (`intoDiscards`) would be cut off by their scrolled section until it is inside, so
+ * a copy above the table flies in its stead and the card shows once the copy is there.
+ */
+function flip(el, from, delay, duration, glow, intoDiscards = false) {
   const to = el.getBoundingClientRect();
   const a = centerOf(from);
   const b = centerOf(to);
@@ -689,6 +680,22 @@ function flip(el, from, delay, duration, glow) {
   const dy = a.y - b.y;
   const scale = from.width / to.width;
   if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(scale - 1) < 0.02) return;
+  if (intoDiscards) {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute('data-card');
+    copy.classList.add('card--ghost');
+    Object.assign(copy.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` });
+    document.body.append(copy);
+    el.style.visibility = 'hidden';
+    const land = () => {
+      copy.remove();
+      el.style.visibility = '';
+    };
+    copy.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${scale})` }, { transform: 'none' }], {
+      duration, delay, easing: 'cubic-bezier(.25,.8,.25,1)', fill: 'backwards',
+    }).finished.then(land, land);
+    return;
+  }
   const start = `translate(${dx}px, ${dy}px) scale(${scale})`;
   // A joker leaving the stock first lights up where it lies, then flies into the hand.
   const keyframes = glow

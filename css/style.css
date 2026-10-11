@@ -2,6 +2,9 @@
   --cw: clamp(44px, min(6.2vw, 8vh), 96px);
   --ch: calc(var(--cw) * 1.4);
   --radius: calc(var(--cw) * 0.12);
+  /* Each card on a discard pile leaves this share of a card height of the one beneath it
+     in sight. */
+  --fan: 0.24;
   --caption-offset: 4px;
   --caption-size: 12px;
 
@@ -228,9 +231,8 @@ body {
   touch-action: none;
 }
 
-/* The shared piles keep to the middle of the screen: the seats each have one half of
-   the table around them and keep to its outer edge. Only a seat that does not fit into
-   its half pushes them aside. */
+/* The shared piles keep to the middle of the screen: the seats each fill one half of
+   the table around them. Only a seat that does not fit into its half pushes them aside. */
 .table {
   flex: 1;
   display: grid;
@@ -238,9 +240,6 @@ body {
   gap: 1.5vh;
   padding: 1.9vh 24px;
 }
-
-.seat--opponent { align-self: start; }
-.seat--me { align-self: end; }
 
 .seat {
   --seat-gap: 8px;
@@ -331,29 +330,57 @@ body {
 .table-tool:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .table-tool svg { width: 60%; height: 60%; }
 
+/* The piles take whatever height their seat has beyond its label and hand. */
 .seat__piles {
+  flex: 1;
   display: flex;
   align-items: flex-start;
   gap: calc(var(--cw) * 0.4);
 }
 
-.discards { display: flex; gap: calc(var(--cw) * 0.16); }
+/* The discard piles fill the height of the piles' row, beginning level with the stock,
+   and scroll once they grow longer. Being of no height of their own, they never make
+   their seat any taller. Their padding keeps the glow of a picked card and the shadow
+   of the last one from being cut off; at the sides, where the seat has room to spare,
+   the margins take it back. The scroll bar has room on either side so the piles stay
+   centred. A drag that starts on a card that can be played moves the card, any other
+   one scrolls. */
+.discards {
+  --bleed: 12px;
+  height: 0;
+  min-height: 100%;
+  margin: 0 calc(var(--bleed) * -1);
+  padding: 0 var(--bleed) var(--bleed);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable both-edges;
+  touch-action: pan-y;
+}
+
+.discards .card[data-source] { touch-action: none; }
+
+/* The piles end together at the bottom of the longest one, so the cards that can be
+   played lie side by side. */
+.discards__piles {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--cw) * 0.16);
+}
 
 /* The hand is as far from the piles above it as from the edge of the seat below it,
    which includes the seat's border. */
 .seat__piles + .hand { margin-top: calc(var(--seat-end) + 1px - var(--seat-gap)); }
 
-/* The captions below the piles take room of their own, but the row of the table is only
-   as high as the piles, so that it is they that are centred. */
+/* The captions below the piles have room of their own, and as much is left above them,
+   so that the piles themselves are centred. */
 .center {
-  --caption-room: 20px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: calc(var(--cw) * 0.7);
-  padding-bottom: var(--caption-room);
-  margin-bottom: calc(var(--caption-room) * -1);
+  padding-block: calc(var(--caption-offset) + var(--caption-size) * 1.2);
 }
 
 .builds { display: flex; gap: calc(var(--cw) * 0.22); }
@@ -437,8 +464,12 @@ body {
 
 .slot--draw .badge, .slot--done .badge { background: var(--ink); }
 
-.slot--discard { height: calc(var(--ch) * (1 + var(--spread))); }
-.slot--discard::before, .slot--discard .slot__hint { top: 0; }
+.slot--discard { height: calc(var(--ch) * (1 + var(--fan) * var(--covered))); }
+.slot--discard .slot__hint { top: 0; }
+
+/* The outline lies beneath the top card, the lowest one, which is in sight however far
+   up the pile reaches. */
+.slot--discard::before { top: calc(var(--ch) * var(--fan) * var(--covered)); }
 
 .slot--discard .card {
   position: absolute;
@@ -471,7 +502,8 @@ body {
 .slot--build.is-target, .slot--discard.is-target { cursor: pointer; }
 
 .slot.is-target.is-hovered::before { background: rgba(247, 197, 72, 0.3); }
-.slot--build.is-target > .card { box-shadow: 0 0 0 3px var(--gold), 0 0 20px var(--glow); }
+.slot--build.is-target > .card,
+.slot--discard.is-target > .card:last-child { box-shadow: 0 0 0 3px var(--gold), 0 0 20px var(--glow); }
 
 /* ---- hands -------------------------------------------------------------------- */
 
@@ -705,7 +737,7 @@ body {
 
 /* The cards of a seat take the eight card widths of the hand, which leaves room on
    either side: the player's label stands at the left edge of the seat, the connection
-   status and the buttons at its right edge, and the seat is no taller than its cards. */
+   status and the buttons at its right edge, and the cards have the seat's full height. */
 @media (min-width: 900px) {
   .seat {
     display: grid;
@@ -715,7 +747,11 @@ body {
     column-gap: calc(var(--cw) * 0.5);
   }
 
+  .seat--opponent { grid-template-rows: auto 1fr; }
+  .seat--me { grid-template-rows: 1fr auto; }
+
   .seat > * { grid-column: 2; }
+  .seat__piles { align-self: stretch; }
 
   .seat__label { display: contents; }
 
@@ -781,7 +817,7 @@ body {
   .status__text { display: none; }
   .status + .table-tools { margin-left: 4px; }
 
-  .center { --caption-room: 16px; gap: calc(var(--cw) * 0.35); }
+  .center { gap: calc(var(--cw) * 0.35); }
 
   .badge { min-width: 20px; height: 20px; border-radius: 10px; font-size: 12px; padding: 0 5px; }
 }
