@@ -39,7 +39,11 @@ export function shuffle(items, rng = Math.random) {
   return items;
 }
 
-export function newGame(names, { rng = Math.random, firstPlayer = Math.floor(rng() * names.length) } = {}) {
+/**
+ * Deals a new game for two players. Unless `firstPlayer` is given, the player with the
+ * lower top card on their stock begins (see `chooseFirstPlayer`).
+ */
+export function newGame(names, { rng = Math.random, firstPlayer } = {}) {
   const values = createDeck();
   const draw = shuffle(values.map((_, id) => id), rng);
   const players = names.map((name) => ({
@@ -57,7 +61,7 @@ export function newGame(names, { rng = Math.random, firstPlayer = Math.floor(rng
     draw,
     completed: [],
     build: Array.from({ length: PILE_COUNT }, () => []),
-    current: firstPlayer,
+    current: firstPlayer ?? chooseFirstPlayer(values, players, rng),
     turn: 1,
     winner: null,
     undo: [],
@@ -70,6 +74,23 @@ export function newGame(names, { rng = Math.random, firstPlayer = Math.floor(rng
     takeStockJokers(state, p, events);
   });
   return { state, events };
+}
+
+/**
+ * The player whose stock shows the lower top card begins, a joker counting lowest.
+ * On a tie both top cards go back into their stocks at a random place below the new
+ * top card, and the next two top cards are compared. Each stock holds more cards than
+ * there are of any one kind, so a tie is soon broken.
+ */
+function chooseFirstPlayer(values, players, rng) {
+  const [a, b] = players.map((player) => player.stock);
+  while (values[a.at(-1)] === values[b.at(-1)]) {
+    for (const stock of [a, b]) {
+      const card = stock.pop();
+      stock.splice(Math.floor(rng() * stock.length), 0, card);
+    }
+  }
+  return values[a.at(-1)] < values[b.at(-1)] ? 0 : 1;
 }
 
 /** Whether a card of `value` may go onto a building pile currently holding `pileSize` cards. */

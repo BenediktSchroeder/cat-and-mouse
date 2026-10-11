@@ -9,6 +9,7 @@ import {
   newGame,
   restoreState,
   RuleError,
+  shuffle,
   STOCK_SIZE,
   viewFor,
 } from '../js/game.js';
@@ -62,12 +63,54 @@ test('a new game deals 30 stock cards and five hand cards to each player', () =>
   assert.equal(state.draw.length + state.players.reduce((n, p) => n + p.stock.length + p.hand.length, 0), 162);
 });
 
+/** A seeded generator, so a deal can be repeated. */
+function seeded(seed) {
+  let s = seed;
+  return () => ((s = (s * 16807) % 2147483647) / 2147483647);
+}
+
+/** The stocks of a deal as they were before any joker moved into a hand: hand cards beyond five came off the stock. */
+const dealtStock = (state, p) => [...state.players[p].stock, ...state.players[p].hand.slice(HAND_SIZE).reverse()];
+
+test('the player with the lower top card on the stock begins, a joker counting lowest', () => {
+  for (let seed = 1; seed < 200; seed++) {
+    const { state } = newGame(['A', 'B'], { rng: seeded(seed) });
+    const [a, b] = [0, 1].map((p) => state.values[dealtStock(state, p).at(-1)]);
+    assert.notEqual(a, b);
+    assert.equal(state.current, a < b ? 0 : 1, `seed ${seed}`);
+  }
+});
+
+test('on equal top cards both go back into the stocks and the next ones decide', () => {
+  // Search for a seed whose deal starts with a tie.
+  for (let seed = 1; seed < 2000; seed++) {
+    const rng = seeded(seed);
+    const values = createDeck();
+    const draw = shuffle([...values.keys()], rng);
+    // The cards the two stocks get, in the order newGame deals them, top card last.
+    const stocks = [[], []];
+    for (let i = 0; i < STOCK_SIZE; i++) for (const stock of stocks) stock.push(draw.pop());
+    const [topA, topB] = stocks.map((stock) => stock.at(-1));
+    if (values[topA] !== values[topB]) continue;
+
+    const { state } = newGame(['A', 'B'], { rng: seeded(seed) });
+    for (const [p, top] of [[0, topA], [1, topB]]) {
+      const stock = dealtStock(state, p);
+      assert.equal(stock.length, STOCK_SIZE);
+      assert.deepEqual([...stock].sort(), [...stocks[p]].sort());
+      assert.notEqual(stock.at(-1), top);
+    }
+    const [a, b] = [0, 1].map((p) => state.values[dealtStock(state, p).at(-1)]);
+    assert.equal(state.current, a < b ? 0 : 1);
+    return;
+  }
+  assert.fail('no seed produced a tie');
+});
+
 test('a joker on the stock at the start comes on top of the five dealt cards', () => {
   // Search for a seed whose deal puts a joker on top of a stock.
   for (let seed = 1; seed < 500; seed++) {
-    let s = seed;
-    const rng = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-    const { state, events } = newGame(['A', 'B'], { rng, firstPlayer: 0 });
+    const { state, events } = newGame(['A', 'B'], { rng: seeded(seed), firstPlayer: 0 });
     const lucky = state.players.findIndex((p) => p.stock.length < STOCK_SIZE);
     if (lucky < 0) continue;
     const player = state.players[lucky];

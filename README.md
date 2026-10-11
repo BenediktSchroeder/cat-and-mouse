@@ -38,6 +38,10 @@ discard piles per player. Draw up to five cards at the start of your turn, draw 
 more whenever your hand runs empty during your turn, end your turn by discarding a
 hand card. Whoever empties their stock first wins.
 
+The player whose stock shows the lower top card begins, a joker counting lowest. If
+both show the same card, each goes back somewhere into its stock and the next two top
+cards are compared.
+
 House rule: a joker that turns up on top of your stock moves into your hand
 automatically, no matter how many cards you hold. Holding five or more cards at the
 start of your turn, you draw none. Everything is resolved the moment it happens, so

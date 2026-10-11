@@ -222,7 +222,7 @@ class HostSession {
         this.save();
         this.publish([]);
       } else {
-        this.start(Math.floor(Math.random() * 2));
+        this.start();
       }
     } else if (this.outdated) {
       // A guest running other code is not listened to.
@@ -233,8 +233,8 @@ class HostSession {
     }
   }
 
-  start(firstPlayer) {
-    const { state, events } = newGame([this.name, this.guestName ?? 'Partner'], { firstPlayer });
+  start() {
+    const { state, events } = newGame([this.name, this.guestName ?? 'Partner']);
     this.state = state;
     this.save();
     this.publish(events);
@@ -242,8 +242,7 @@ class HostSession {
   }
 
   rematch() {
-    // The loser of the last round begins the next one.
-    if (this.state?.winner !== null) this.start((this.state.winner + 1) % 2);
+    if (this.state?.winner !== null) this.start();
   }
 
   act(p, action) {
