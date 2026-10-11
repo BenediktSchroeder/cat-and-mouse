@@ -507,6 +507,8 @@ body {
   color: var(--color);
   user-select: none;
   transition: translate 0.15s ease, box-shadow 0.15s ease;
+  /* What a card stacks above its frame stays beneath the cards lying on it. */
+  isolation: isolate;
 }
 
 .card--blue { --color: var(--blue); }
@@ -533,20 +535,28 @@ body {
   line-height: 1;
 }
 
+/* The small numbers sit right in the corners, where they stay readable on a card that
+   the next one in a pile covers almost completely. Their background hides the inner
+   frame running beneath them; its corner follows the card's rounded one. */
 .card__pip {
   position: absolute;
-  top: calc(var(--cw) * 0.1);
-  left: calc(var(--cw) * 0.13);
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: calc(var(--cw) * 0.025) calc(var(--cw) * 0.04);
+  border-radius: calc(var(--radius) - 1px) 0 calc(var(--radius) * 0.6) 0;
+  background: var(--paper);
   font-size: calc(var(--cw) * 0.19);
   font-weight: 600;
   line-height: 1;
 }
 
+/* Turned round, the number keeps its rounded corner in the card's corner. */
 .card__pip--end {
   top: auto;
   left: auto;
-  bottom: calc(var(--cw) * 0.1);
-  right: calc(var(--cw) * 0.13);
+  bottom: 0;
+  right: 0;
   transform: rotate(180deg);
 }
 
@@ -558,6 +568,14 @@ body {
 }
 
 .card--joker::after { opacity: 0.45; }
+
+/* Behind a small star lies the part of the card's gradient it covers: the gradient at
+   card size, from the star's corner, and turned with the star at the bottom. */
+.card--joker .card__pip {
+  background: linear-gradient(150deg, var(--joker-a), var(--joker-b)) 0 0 / calc(var(--cw) - 2px) calc(var(--ch) - 2px);
+}
+
+.card--joker .card__pip--end { background-image: linear-gradient(330deg, var(--joker-a), var(--joker-b)); }
 .card--joker .card__face { font-size: calc(var(--cw) * 0.62); padding-bottom: calc(var(--cw) * 0.16); }
 
 .card__word {
