@@ -81,6 +81,7 @@ body {
 
 .status:not(:empty)::before {
   content: '';
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -279,6 +280,20 @@ body {
 
 .seat__hint { color: var(--gold); font-size: 14px; }
 
+/* The opponent's label keeps to one line, so the status never makes it taller: when
+   the line runs short, the status gives way and its full text remains as tooltip. */
+.seat--opponent .seat__label { white-space: nowrap; }
+
+/* Centred on the line like the buttons beside it, rather than on the names' baseline. */
+.seat__label .status {
+  align-self: center;
+  min-width: 0;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.status__text { overflow: hidden; text-overflow: ellipsis; }
+
 /* The negative margins keep the buttons from making the label any taller than its text. */
 .table-tools {
   --size: 30px;
@@ -287,6 +302,8 @@ body {
   gap: 2px;
   margin: calc((var(--size) - 18px) / -2) 0 calc((var(--size) - 18px) / -2) auto;
 }
+
+.status + .table-tools { margin-left: 8px; }
 
 .table-tool {
   display: grid;
@@ -682,6 +699,9 @@ body {
   .seat__turn { font-size: 11px; padding: 1px 8px; }
   .seat__hint { flex-basis: 100%; font-size: 12px; line-height: 1.25; white-space: normal; }
   .table-tools { --size: 26px; }
+  /* The label has no room for the status text, so only its coloured dot remains. */
+  .status__text { display: none; }
+  .status + .table-tools { margin-left: 4px; }
 
   .center { gap: calc(var(--cw) * 0.35); padding-bottom: 16px; }
 

@@ -15,6 +15,7 @@ import { Board } from './ui.js';
 const VERSION = 3;
 
 const $ = (selector) => document.querySelector(selector);
+const topbar = $('.topbar');
 const lobby = $('#lobby');
 const boardRoot = $('#board');
 const statusEl = $('#status');
@@ -48,9 +49,19 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.remove('is-visible'), 3200);
 }
 
+// The page's one board, once a room is open. The table leaves the top bar out to keep
+// its height for the cards, so the board shows the status itself.
+let board = null;
+
+function openBoard(options) {
+  board = new Board(boardRoot, options);
+  return board;
+}
+
 function setStatus(text, tone = 'neutral') {
   statusEl.textContent = text;
   statusEl.dataset.tone = tone;
+  board?.showStatus(text, tone);
 }
 
 function inviteLink(code) {
@@ -67,6 +78,7 @@ async function copyInvite(code) {
 }
 
 function showLobby(...content) {
+  topbar.hidden = false;
   boardRoot.hidden = true;
   lobby.hidden = false;
   lobby.replaceChildren(...content);
@@ -148,6 +160,7 @@ function showResult(view, delay, onRematch) {
 }
 
 function showView(board, view, events, onRematch) {
+  topbar.hidden = true;
   lobby.hidden = true;
   boardRoot.hidden = false;
   const duration = board.update(view, events);
@@ -167,10 +180,11 @@ class HostSession {
     this.guestId = saved?.guestId ?? null;
     this.guestName = this.state?.players[1].name ?? null;
     this.guestOnline = false;
-    this.board = new Board(boardRoot, {
+    this.board = openBoard({
       onAction: (action) => this.act(0, action),
       onMessage: toast,
       hostTools: {
+        onInvite: () => copyInvite(code),
         onSave: () => downloadGame(this.state),
         onLoad: () => this.load(),
       },
@@ -313,7 +327,7 @@ class HostSession {
 // ---- guest ----------------------------------------------------------------
 
 function joinAsGuest(code, name) {
-  const board = new Board(boardRoot, {
+  const board = openBoard({
     onAction: (action) => link.send({ type: 'action', action }),
     onMessage: toast,
   });

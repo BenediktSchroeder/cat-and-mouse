@@ -74,6 +74,7 @@ const CROSS = '<path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" 
 
 const SAVE_ICON = '<path d="M12 4v10m-4-4l4 4 4-4M5 17v2h14v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
 const LOAD_ICON = '<path d="M12 15V5m-4 4l4-4 4 4M5 17v2h14v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+const LINK_ICON = '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
 
 function toolButton(title, icon, attrs) {
   const button = h('button', { class: 'table-tool', type: 'button', title, 'aria-label': title, ...attrs });
@@ -112,12 +113,16 @@ function soundOf(ev, you) {
 }
 
 export class Board {
-  /** `hostTools`, given only on the host's page, adds buttons to save the game to a file and load one. */
+  /**
+   * `hostTools`, given only on the host's page, adds buttons to copy the invite link,
+   * save the game to a file and load one.
+   */
   constructor(root, { onAction, onMessage, hostTools = null }) {
     this.root = root;
     this.onAction = onAction;
     this.onMessage = onMessage;
     this.hostTools = hostTools;
+    this.status = { text: '', tone: 'neutral' };
     this.view = null;
     this.selection = null;
     this.dragEndedAt = 0;
@@ -146,6 +151,19 @@ export class Board {
       return 0;
     }
     return this.#animate(events, before);
+  }
+
+  /** Shows the state of the connection to the other page, which can change between views. */
+  showStatus(text, tone) {
+    this.status = { text, tone };
+    const el = this.root.querySelector('[data-status]');
+    if (el) this.#fillStatus(el);
+  }
+
+  #fillStatus(el) {
+    el.dataset.tone = this.status.tone;
+    el.title = this.status.text;
+    el.firstElementChild.textContent = this.status.text;
   }
 
   /** The sounds of events shown without animation, spaced like a quick deal. */
@@ -187,17 +205,26 @@ export class Board {
         h('span', { class: 'seat__meta' }, stockLabel),
         active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
         mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
-        // The top corner of the table is free on every screen, unlike the top bar, which phones hide.
+        // The opponent's label shares its line with the connection status and the
+        // buttons, so the table needs no bar of its own above it.
+        mine ? null : this.#statusEl(),
         mine ? null : this.#tools(),
       ),
       mine ? [piles, this.#hand(player, p, canAct)] : [this.#hiddenHand(player, p), piles],
     );
   }
 
+  #statusEl() {
+    const el = h('span', { class: 'status', 'data-status': true }, h('span', { class: 'status__text' }));
+    this.#fillStatus(el);
+    return el;
+  }
+
   #tools() {
     const soundToggle = h('button', { class: 'table-tool', type: 'button', 'aria-label': 'Sound', 'data-sound-toggle': true });
     showSoundState(soundToggle);
     return h('span', { class: 'table-tools' },
+      this.hostTools ? toolButton('Copy the invite link', LINK_ICON, { 'data-copy-invite': true }) : null,
       this.hostTools ? toolButton('Save the game to a file', SAVE_ICON, { 'data-save-game': true }) : null,
       this.hostTools ? toolButton('Load a saved game', LOAD_ICON, { 'data-load-game': true }) : null,
       soundToggle,
@@ -418,6 +445,7 @@ export class Board {
       showSoundState(toggle);
       return sound.play('pick');
     }
+    if (e.target.closest('[data-copy-invite]')) return this.hostTools.onInvite();
     if (e.target.closest('[data-save-game]')) return this.hostTools.onSave();
     if (e.target.closest('[data-load-game]')) return this.hostTools.onLoad();
     if (e.target.closest('[data-end-turn]')) return this.onAction({ type: 'endTurn' });
