@@ -14,6 +14,10 @@ traffic. The page is static and runs on GitHub Pages without a build step.
    number card plays it onto the first building pile it fits. To discard a set, click
    each of its cards in your hand, then click a discard pile or drag the set there.
    The speaker in the top corner of the table turns the sounds on and off.
+4. **Undo** next to your name, or Ctrl+Z, takes back the moves of your turn one by
+   one. A card played from your stock turns up the next one and an emptied hand
+   draws new cards, so such a move is final, along with every move before it.
+   Discarding ends your turn, after which nothing can be taken back.
 
 The browser that created the game hosts it and keeps it in its local storage, so
 either player can reload the page or lose the connection and carry on where they left off.

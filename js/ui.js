@@ -81,6 +81,7 @@ function soundOf(ev, you) {
   switch (ev.kind) {
     case 'play':
     case 'discard':
+    case 'undo':
       return 'place';
     case 'draw':
       return 'take';
@@ -117,7 +118,7 @@ export class Board {
     root.addEventListener('click', (e) => this.#click(e));
     root.addEventListener('dblclick', (e) => this.#doubleClick(e));
     root.addEventListener('pointerdown', (e) => this.#pointerDown(e));
-    document.addEventListener('keydown', (e) => e.key === 'Escape' && this.#select(null));
+    document.addEventListener('keydown', (e) => this.#keyDown(e));
   }
 
   get myTurn() {
@@ -196,12 +197,23 @@ export class Board {
           h('span', { class: 'seat__name' }, mine ? 'You' : player.name),
           h('span', { class: 'seat__meta' }, stockLabel),
           active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
+          canAct ? this.#undoButton(v) : null,
           mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
         ),
         mine ? null : h('div', { class: 'seat__side' }, this.#statusEl(), this.#tools()),
       ),
       mine ? [piles, this.#hand(player, p, canAct)] : [this.#hiddenHand(player, p), piles],
     );
+  }
+
+  /** Present for the whole turn, so it does not move the label about as it comes and goes. */
+  #undoButton(v) {
+    const title = v.canUndo
+      ? 'Take back your last move (Ctrl+Z)'
+      : 'Nothing to take back: a card from your stock or a fresh draw cannot be undone.';
+    return h('button', {
+      class: 'button button--quiet undo', type: 'button', title, disabled: !v.canUndo, 'data-undo': true,
+    }, 'Undo');
   }
 
   #statusEl() {
@@ -431,12 +443,26 @@ export class Board {
     if (e.target.closest('[data-save-game]')) return this.hostTools.onSave();
     if (e.target.closest('[data-load-game]')) return this.hostTools.onLoad();
     if (e.target.closest('[data-end-turn]')) return this.onAction({ type: 'endTurn' });
+    if (e.target.closest('[data-undo]')) return this.#undo();
     const target = e.target.closest('[data-target]');
     if (this.selection && target && this.#fits(this.selection, target)) return this.#perform(target);
     const source = e.target.closest('[data-source]');
     if (source) return this.#select(this.#toggle(this.#sourceOf(source)));
     if (this.selection && target) return this.#perform(target);
     this.#select(null);
+  }
+
+  #keyDown(e) {
+    if (e.key === 'Escape') this.#select(null);
+    if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && this.myTurn) {
+      e.preventDefault();
+      this.#undo();
+    }
+  }
+
+  #undo() {
+    this.#select(null);
+    if (this.view.canUndo) this.onAction({ type: 'undo' });
   }
 
   /** Double-clicking a number card plays it onto the first building pile it fits. */

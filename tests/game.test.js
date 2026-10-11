@@ -37,6 +37,7 @@ function makeState({ players, draw = [], build = [[], [], [], []], current = 0 }
     current,
     turn: 1,
     winner: null,
+    undo: [],
   };
 }
 
@@ -231,6 +232,70 @@ test('the view hides the opponent hand and the cards they draw', () => {
   assert.ok(forDrawer.every((e) => e.card.v === 5));
 });
 
+const undo = (state, p) => applyAction(state, p, { type: 'undo' });
+
+test('the moves of a turn are taken back one by one, latest first', () => {
+  const state = makeState({ players: [{ hand: [3, 1, 9, 2], discards: [[4, 2], [], [], []] }, {}] });
+  const start = JSON.parse(JSON.stringify(state));
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 1), to: 0 });
+  applyAction(state, 0, { type: 'play', from: 'discard', pile: 0, to: 0 });
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 3), to: 0 });
+  assert.equal(viewFor(state, 0).canUndo, true);
+
+  const three = state.build[0].at(-1);
+  const events = undo(state, 0);
+  assert.deepEqual(handValues(state, 0), [3, 9, 2]);
+  assert.equal(state.build[0].length, 2);
+  assert.deepEqual(events, [{ kind: 'undo', card: three, from: 'build:0', to: 'hand:0' }]);
+
+  undo(state, 0);
+  assert.deepEqual(state.players[0].discards[0].map((id) => state.values[id]), [4, 2]);
+  undo(state, 0);
+  assert.deepEqual(state, start);
+  assert.equal(viewFor(state, 0).canUndo, false);
+  assert.throws(() => undo(state, 0), RuleError);
+});
+
+test('taking back the twelfth card restores the completed building pile', () => {
+  const state = makeState({
+    players: [{ hand: [12, 3] }, {}],
+    build: [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, J], [], [], []],
+  });
+  const twelve = handCard(state, 0, 12);
+  applyAction(state, 0, { type: 'play', from: 'hand', card: twelve, to: 0 });
+  const events = undo(state, 0);
+  assert.equal(state.build[0].length, 11);
+  assert.equal(state.completed.length, 0);
+  assert.deepEqual(handValues(state, 0), [12, 3]);
+  assert.deepEqual(events, [{ kind: 'undo', card: twelve, from: 'done', to: 'hand:0' }]);
+});
+
+test('a card played from the stock cannot be taken back, nor any move before it', () => {
+  const state = makeState({ players: [{ stock: [5, 2], hand: [1, 7] }, {}] });
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 1), to: 0 });
+  applyAction(state, 0, { type: 'play', from: 'stock', to: 0 });
+  assert.equal(viewFor(state, 0).canUndo, false);
+  assert.throws(() => undo(state, 0), RuleError);
+});
+
+test('emptying the hand draws new cards, which cannot be taken back', () => {
+  const state = makeState({ players: [{ hand: [1, 2] }, {}], draw: [9, 9, 9, 9, 9] });
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 1), to: 0 });
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 2), to: 0 });
+  assert.throws(() => undo(state, 0), RuleError);
+  assert.deepEqual(handValues(state, 0), [9, 9, 9, 9, 9]);
+});
+
+test('discarding ends the turn, after which none of its moves can be taken back', () => {
+  const state = makeState({ players: [{ hand: [1, 8, 4] }, { hand: [1, 1] }], draw: [5, 5, 5] });
+  applyAction(state, 0, { type: 'play', from: 'hand', card: handCard(state, 0, 1), to: 0 });
+  applyAction(state, 0, { type: 'discard', cards: [handCard(state, 0, 8)], pile: 0 });
+  assert.throws(() => undo(state, 0), RuleError);
+  assert.throws(() => undo(state, 1), RuleError);
+  assert.equal(state.players[0].discards[0].length, 1);
+  assert.equal(state.build[0].length, 1);
+});
+
 /** A game a few turns in, written to a file and read back as the host does. */
 function savedGame() {
   const { state } = newGame(['A', 'B'], { firstPlayer: 0 });
@@ -248,6 +313,12 @@ test('a saved game is restored as it was and can be played on', () => {
   const p = state.current;
   applyAction(state, p, { type: 'discard', cards: [state.players[p].hand[0]], pile: 0 });
   assert.equal(state.turn, saved.turn + 1);
+});
+
+test('the moves made before a game was saved cannot be taken back after loading it', () => {
+  const saved = savedGame();
+  const move = { before: { hand: [], discards: [[], [], [], []], build: [[], [], [], []], completed: [] }, card: 0, from: 'hand:0', at: 'build:0' };
+  assert.deepEqual(restoreState({ ...saved, undo: [move] }).undo, []);
 });
 
 test('a saved game with a card missing, duplicated or out of place is refused', () => {

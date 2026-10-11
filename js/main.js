@@ -12,7 +12,7 @@ import { Board } from './ui.js';
 // Both pages must run the same code: a page opened before an update keeps its old
 // code, and its moves would be judged by different rules. Raise this number whenever
 // the rules or the messages between the pages change.
-const VERSION = 3;
+const VERSION = 4;
 
 const $ = (selector) => document.querySelector(selector);
 const topbar = $('.topbar');

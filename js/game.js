@@ -6,7 +6,13 @@
 //
 // Every mutation reports what happened as a list of events, which the UI replays as
 // animations: `{ kind, card, from, to }` for a card changing places, where `from` and
-// `to` are zone names such as `hand:0`, `stock:1`, `discard:0:2`, `build:3` or `draw`.
+// `to` are zone names such as `hand:0`, `stock:1`, `discard:0:2`, `build:3`, `done` or `draw`.
+//
+// `state.undo` holds what the current player needs to take back the moves of their
+// turn, one entry per move, the latest last. Only moves that uncover no hidden card
+// can be taken back, or a player could peek and retract: a card played from the stock
+// uncovers the next one and an emptied hand draws new cards, so either move clears
+// the stack, as does the end of the turn.
 
 export const JOKER = 0;
 export const HAND_SIZE = 5;
@@ -54,6 +60,7 @@ export function newGame(names, { rng = Math.random, firstPlayer = Math.floor(rng
     current: firstPlayer,
     turn: 1,
     winner: null,
+    undo: [],
   };
   const events = [];
   // Every player starts with five cards. A joker on top of the stock joins them
@@ -84,6 +91,9 @@ export function applyAction(state, p, action, rng = Math.random) {
     case 'endTurn':
       if (state.players[p].hand.length) throw new RuleError('Discard a card to end your turn.');
       endTurn(state, events, rng);
+      break;
+    case 'undo':
+      undo(state, p, events);
       break;
     default:
       throw new RuleError('Unknown action.');
@@ -116,16 +126,24 @@ function play(state, p, action, events, rng) {
     throw new RuleError(`This building pile needs a ${target.length + 1} or a joker.`);
   }
 
+  const before = {
+    hand: [...player.hand],
+    discards: player.discards.map((pile) => [...pile]),
+    build: state.build.map((pile) => [...pile]),
+    completed: [...state.completed],
+  };
   if (action.from === 'hand') player.hand.splice(player.hand.indexOf(card), 1);
   else if (action.from === 'stock') player.stock.pop();
   else player.discards[action.pile].pop();
   target.push(card);
   events.push({ kind: 'play', card, from, to: `build:${action.to}` });
 
+  let at = `build:${action.to}`;
   if (target.length === TOP_VALUE) {
     state.completed.push(...target);
     state.build[action.to] = [];
     events.push({ kind: 'complete', pile: action.to });
+    at = 'done';
   }
 
   // Whatever happens first decides the race between an emptied hand and an
@@ -139,6 +157,22 @@ function play(state, p, action, events, rng) {
   } else if (action.from === 'hand' && !player.hand.length) {
     drawCards(state, p, HAND_SIZE, events, rng);
   }
+
+  // A game stored by an earlier version of the page has no undo stack yet.
+  if (action.from === 'stock' || events.some((event) => event.kind === 'draw')) state.undo = [];
+  else (state.undo ??= []).push({ before, card, from, at });
+}
+
+/** Takes back the latest move of the turn, putting its card back from `at` to `from`. */
+function undo(state, p, events) {
+  const move = state.undo?.pop();
+  if (!move) throw new RuleError('There is no move to take back.');
+  const player = state.players[p];
+  player.hand = move.before.hand;
+  player.discards = move.before.discards;
+  state.build = move.before.build;
+  state.completed = move.before.completed;
+  events.push({ kind: 'undo', card: move.card, from: move.at, to: move.from });
 }
 
 /**
@@ -167,6 +201,7 @@ function discard(state, p, action, events, rng) {
 }
 
 function endTurn(state, events, rng) {
+  state.undo = [];
   state.current = (state.current + 1) % state.players.length;
   state.turn++;
   events.push({ kind: 'turn', player: state.current });
@@ -207,7 +242,8 @@ function drawCards(state, p, count, events, rng) {
 
 /**
  * Rebuilds a state read back from a saved game, keeping only the fields the rules
- * know. A state that could not have come out of a game is refused: the deck must be
+ * know, apart from the undo stack: the moves made before the game was saved cannot
+ * be taken back. A state that could not have come out of a game is refused: the deck must be
  * complete, every card must lie in exactly one place, and every building pile must
  * climb from 1 without a gap.
  */
@@ -251,6 +287,7 @@ export function restoreState(saved) {
     current,
     turn,
     winner,
+    undo: [],
   };
 }
 
@@ -262,6 +299,7 @@ export function viewFor(state, viewer) {
     current: state.current,
     turn: state.turn,
     winner: state.winner,
+    canUndo: state.undo?.length > 0,
     drawCount: state.draw.length,
     completedCount: state.completed.length,
     build: state.build.map((pile) => pile.map(card)),
