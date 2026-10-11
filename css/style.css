@@ -2,9 +2,11 @@
   --cw: clamp(44px, min(6.2vw, 8vh), 96px);
   --ch: calc(var(--cw) * 1.4);
   --radius: calc(var(--cw) * 0.12);
-  /* Each card on a discard pile leaves this share of a card height of the one beneath it
-     in sight. */
-  --fan: 0.24;
+  /* How much of the card beneath each card on a discard pile is in sight: the small
+     number at its top, with as much room below the digits as above them. That is the
+     digits' height and twice their distance from the card's edge, which is made of the
+     card's border, the number's padding and the space above the digits in their line. */
+  --fan: calc(2px + var(--cw) * 0.25);
   --caption-offset: 4px;
   --caption-size: 12px;
 
@@ -464,17 +466,17 @@ body {
 
 .slot--draw .badge, .slot--done .badge { background: var(--ink); }
 
-.slot--discard { height: calc(var(--ch) * (1 + var(--fan) * var(--covered))); }
+.slot--discard { height: calc(var(--ch) + var(--fan) * var(--covered)); }
 .slot--discard .slot__hint { top: 0; }
 
 /* The outline lies beneath the top card, the lowest one, which is in sight however far
    up the pile reaches. */
-.slot--discard::before { top: calc(var(--ch) * var(--fan) * var(--covered)); }
+.slot--discard::before { top: calc(var(--fan) * var(--covered)); }
 
 .slot--discard .card {
   position: absolute;
   left: 0;
-  top: calc(var(--ch) * var(--fan) * var(--k));
+  top: calc(var(--fan) * var(--k));
 }
 
 .slot--stock .card, .slot--build .card, .slot--draw .card, .slot--done .card { position: absolute; inset: 0; }
