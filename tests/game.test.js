@@ -7,6 +7,7 @@ import {
   HAND_SIZE,
   JOKER,
   newGame,
+  restoreState,
   RuleError,
   STOCK_SIZE,
   viewFor,
@@ -228,4 +229,47 @@ test('the view hides the opponent hand and the cards they draw', () => {
   assert.ok(forViewer.every((e) => e.card === null));
   const forDrawer = eventsFor(state, events, 1).filter((e) => e.kind === 'draw');
   assert.ok(forDrawer.every((e) => e.card.v === 5));
+});
+
+/** A game a few turns in, written to a file and read back as the host does. */
+function savedGame() {
+  const { state } = newGame(['A', 'B'], { firstPlayer: 0 });
+  for (let turn = 0; turn < 4; turn++) {
+    const p = state.current;
+    applyAction(state, p, { type: 'discard', cards: [state.players[p].hand[0]], pile: turn % 4 });
+  }
+  return JSON.parse(JSON.stringify(state));
+}
+
+test('a saved game is restored as it was and can be played on', () => {
+  const saved = savedGame();
+  const state = restoreState({ ...saved, extra: 'ignored' });
+  assert.deepEqual(state, saved);
+  const p = state.current;
+  applyAction(state, p, { type: 'discard', cards: [state.players[p].hand[0]], pile: 0 });
+  assert.equal(state.turn, saved.turn + 1);
+});
+
+test('a saved game with a card missing, duplicated or out of place is refused', () => {
+  const broken = [
+    (s) => s.draw.pop(),
+    (s) => s.draw.push(s.draw[0]),
+    (s) => s.players[0].hand.push(s.draw.pop() + 0.5),
+    (s) => s.values.pop(),
+    (s) => { s.values[s.values.indexOf(J)] = 1; },
+    (s) => s.build[0].push(s.draw.splice(s.draw.findIndex((id) => s.values[id] === 5), 1)[0]),
+    (s) => s.players.pop(),
+    (s) => s.players[1].discards.pop(),
+    (s) => { s.current = 2; },
+    (s) => { s.winner = -1; },
+    (s) => { s.turn = 0; },
+    (s) => { delete s.completed; },
+  ];
+  for (const breakIt of broken) {
+    const saved = savedGame();
+    breakIt(saved);
+    assert.throws(() => restoreState(saved), RuleError, breakIt.toString());
+  }
+  assert.throws(() => restoreState(null), RuleError);
+  assert.throws(() => restoreState('game'), RuleError);
 });

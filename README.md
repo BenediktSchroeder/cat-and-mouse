@@ -19,6 +19,13 @@ The browser that created the game hosts it and keeps it in its local storage, so
 either player can reload the page or lose the connection and carry on where they left off.
 The host must keep the tab open (or reopen it) for the game to continue.
 
+The host can also save the game to a file with the download button in the top corner
+of the table and load it again with the upload button next to it, for example to carry
+on in another browser or on another day. A saved game can be loaded into a running
+game, which it replaces, or into a new room before the partner joins. The host keeps
+the first seat and the partner of the room the second, whoever held them when the game
+was saved. The guest's page has neither button.
+
 ## Rules
 
 The basic rules for two players: 162 cards (twelve each of 1–12 and 18

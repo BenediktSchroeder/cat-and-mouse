@@ -72,6 +72,15 @@ const SPEAKER = '<path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor"/>';
 const WAVES = '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 
+const SAVE_ICON = '<path d="M12 4v10m-4-4l4 4 4-4M5 17v2h14v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+const LOAD_ICON = '<path d="M12 15V5m-4 4l4-4 4 4M5 17v2h14v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+
+function toolButton(title, icon, attrs) {
+  const button = h('button', { class: 'table-tool', type: 'button', title, 'aria-label': title, ...attrs });
+  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>`;
+  return button;
+}
+
 function showSoundState(button) {
   const on = sound.isOn();
   button.setAttribute('aria-pressed', String(on));
@@ -103,10 +112,12 @@ function soundOf(ev, you) {
 }
 
 export class Board {
-  constructor(root, { onAction, onMessage }) {
+  /** `hostTools`, given only on the host's page, adds buttons to save the game to a file and load one. */
+  constructor(root, { onAction, onMessage, hostTools = null }) {
     this.root = root;
     this.onAction = onAction;
     this.onMessage = onMessage;
+    this.hostTools = hostTools;
     this.view = null;
     this.selection = null;
     this.dragEndedAt = 0;
@@ -177,16 +188,20 @@ export class Board {
         active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
         mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
         // The top corner of the table is free on every screen, unlike the top bar, which phones hide.
-        mine ? null : this.#soundToggle(),
+        mine ? null : this.#tools(),
       ),
       mine ? [piles, this.#hand(player, p, canAct)] : [this.#hiddenHand(player, p), piles],
     );
   }
 
-  #soundToggle() {
-    const button = h('button', { class: 'sound-toggle', type: 'button', 'aria-label': 'Sound', 'data-sound-toggle': true });
-    showSoundState(button);
-    return button;
+  #tools() {
+    const soundToggle = h('button', { class: 'table-tool', type: 'button', 'aria-label': 'Sound', 'data-sound-toggle': true });
+    showSoundState(soundToggle);
+    return h('span', { class: 'table-tools' },
+      this.hostTools ? toolButton('Save the game to a file', SAVE_ICON, { 'data-save-game': true }) : null,
+      this.hostTools ? toolButton('Load a saved game', LOAD_ICON, { 'data-load-game': true }) : null,
+      soundToggle,
+    );
   }
 
   #stock(player, p, canAct) {
@@ -403,6 +418,8 @@ export class Board {
       showSoundState(toggle);
       return sound.play('pick');
     }
+    if (e.target.closest('[data-save-game]')) return this.hostTools.onSave();
+    if (e.target.closest('[data-load-game]')) return this.hostTools.onLoad();
     if (e.target.closest('[data-end-turn]')) return this.onAction({ type: 'endTurn' });
     const target = e.target.closest('[data-target]');
     if (this.selection && target && this.#fits(this.selection, target)) return this.#perform(target);

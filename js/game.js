@@ -205,6 +205,55 @@ function drawCards(state, p, count, events, rng) {
   }
 }
 
+/**
+ * Rebuilds a state read back from a saved game, keeping only the fields the rules
+ * know. A state that could not have come out of a game is refused: the deck must be
+ * complete, every card must lie in exactly one place, and every building pile must
+ * climb from 1 without a gap.
+ */
+export function restoreState(saved) {
+  const refuse = () => { throw new RuleError('The file does not hold a valid saved game.'); };
+  if (!saved || typeof saved !== 'object') refuse();
+  const { values, players, draw, completed, build, current, turn, winner } = saved;
+  const deck = createDeck();
+  const byValue = (a, b) => a - b;
+  if (!Array.isArray(values) || !values.every(Number.isInteger)) refuse();
+  if ([...values].sort(byValue).join() !== deck.sort(byValue).join()) refuse();
+  if (!Array.isArray(players) || players.length !== 2) refuse();
+  if (!Array.isArray(build) || build.length !== PILE_COUNT) refuse();
+  if (!players.every((p) => typeof p?.name === 'string' && Array.isArray(p.discards) && p.discards.length === PILE_COUNT)) {
+    refuse();
+  }
+
+  const piles = [draw, completed, ...build, ...players.flatMap((p) => [p.stock, p.hand, ...p.discards])];
+  if (!piles.every((pile) => Array.isArray(pile) && pile.every(Number.isInteger))) refuse();
+  const cards = piles.flat();
+  if (cards.length !== values.length || new Set(cards).size !== cards.length) refuse();
+  if (!cards.every((card) => card >= 0 && card < values.length)) refuse();
+  if (!build.every((pile) => pile.length < TOP_VALUE && pile.every((card, k) => fitsOnBuildPile(values[card], k)))) {
+    refuse();
+  }
+
+  const isSeat = (p) => Number.isInteger(p) && p >= 0 && p < players.length;
+  if (!isSeat(current) || !Number.isInteger(turn) || turn < 1 || (winner !== null && !isSeat(winner))) refuse();
+
+  return {
+    values: [...values],
+    players: players.map((p) => ({
+      name: p.name,
+      stock: [...p.stock],
+      hand: [...p.hand],
+      discards: p.discards.map((pile) => [...pile]),
+    })),
+    draw: [...draw],
+    completed: [...completed],
+    build: build.map((pile) => [...pile]),
+    current,
+    turn,
+    winner,
+  };
+}
+
 /** What `viewer` is allowed to see: the opponent's hand and the face-down piles stay hidden. */
 export function viewFor(state, viewer) {
   const card = (id) => ({ id, v: state.values[id] });

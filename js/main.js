@@ -5,14 +5,14 @@
 // each player only the view they may see. The guest's browser just renders the views
 // it receives and forwards the player's actions.
 
-import { RuleError, newGame, applyAction, viewFor, eventsFor } from './game.js';
+import { RuleError, newGame, applyAction, viewFor, eventsFor, restoreState } from './game.js';
 import { HostLink, GuestLink, randomCode } from './net.js';
 import { Board } from './ui.js';
 
 // Both pages must run the same code: a page opened before an update keeps its old
 // code, and its moves would be judged by different rules. Raise this number whenever
 // the rules or the messages between the pages change.
-const VERSION = 2;
+const VERSION = 3;
 
 const $ = (selector) => document.querySelector(selector);
 const lobby = $('#lobby');
@@ -82,6 +82,48 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// ---- saved games ----------------------------------------------------------
+
+// Marks a file as a saved game of this page, so any other JSON file is turned down.
+const SAVE_KIND = 'cat-and-mouse';
+
+function downloadGame(state) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const json = JSON.stringify({ kind: SAVE_KIND, savedAt: now.toISOString(), state });
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cat-and-mouse-${stamp}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Lets the player choose a saved game file and passes its state on; nothing happens if they cancel. */
+function openGameFile(onLoad) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    let state = null;
+    try {
+      const saved = JSON.parse(await file.text());
+      if (saved?.kind === SAVE_KIND) state = restoreState(saved.state);
+    } catch {
+      // The file is no JSON or holds no valid game, which leaves the state unset.
+    }
+    if (!state) {
+      toast('This file does not hold a saved Cat & Mouse game.');
+      return;
+    }
+    onLoad(state);
+  };
+  input.click();
+}
+
 // ---- game over ------------------------------------------------------------
 
 let overlayTimer;
@@ -128,6 +170,10 @@ class HostSession {
     this.board = new Board(boardRoot, {
       onAction: (action) => this.act(0, action),
       onMessage: toast,
+      hostTools: {
+        onSave: () => downloadGame(this.state),
+        onLoad: () => this.load(),
+      },
     });
     this.link = new HostLink(code, {
       onReady: () => this.refresh(),
@@ -205,10 +251,29 @@ class HostSession {
     this.publish(events);
   }
 
-  publish(events) {
+  /**
+   * Replaces the game with one from a saved file. The seats keep their current
+   * players: the host plays the first seat, as they did in the saved game, and a
+   * guest already in the room keeps the second one.
+   */
+  load() {
+    openGameFile((state) => {
+      if (this.state && this.state.winner === null && !confirm('Replace the game on the table with the saved one?')) return;
+      state.players[0].name = this.name;
+      if (this.guestName) state.players[1].name = this.guestName;
+      this.state = state;
+      this.save();
+      this.publish([], 'The host loaded a saved game.');
+      this.refresh();
+      toast('Saved game loaded.');
+    });
+  }
+
+  /** Shows the state on both pages; `notice` is a message for the guest. */
+  publish(events, notice = null) {
     showView(this.board, viewFor(this.state, 0), eventsFor(this.state, events, 0), () => this.rematch());
     this.link.send({
-      type: 'state', version: VERSION, view: viewFor(this.state, 1), events: eventsFor(this.state, events, 1),
+      type: 'state', version: VERSION, view: viewFor(this.state, 1), events: eventsFor(this.state, events, 1), notice,
     });
   }
 
@@ -236,7 +301,10 @@ class HostSession {
           <button class="button" id="copy-invite">Copy</button>
         </div>
         <p class="hint"><span class="pulse"></span> Waiting for your partner to join…</p>
+        <p class="resume">To carry on with a game you saved,
+          <button class="link-button" id="load-game">load it</button> before your partner joins.</p>
       </div>`));
+    $('#load-game').onclick = () => this.load();
     $('#copy-invite').onclick = () => copyInvite(this.code);
     $('#invite-link').onfocus = (e) => e.target.select();
   }
@@ -273,6 +341,7 @@ function joinAsGuest(code, name) {
       } else if (msg.type === 'state') {
         started = true;
         showView(board, msg.view, msg.events, rematch);
+        if (msg.notice) toast(msg.notice);
       } else if (msg.type === 'error') {
         board.reject();
         toast(msg.message);
