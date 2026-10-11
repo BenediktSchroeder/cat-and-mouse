@@ -200,15 +200,17 @@ export class Board {
     );
     // Each hand sits at the edge of the table on its player's side.
     return h('section', { class: `seat ${mine ? 'seat--me' : 'seat--opponent'} ${active ? 'is-active' : ''}` },
+      // The label is made of the player and, on the opponent's side, the connection
+      // status with the buttons, so the table needs no bar of its own. Wide screens
+      // put the two beside the cards, narrow ones on a line above them.
       h('header', { class: 'seat__label' },
-        h('span', { class: 'seat__name' }, mine ? 'You' : player.name),
-        h('span', { class: 'seat__meta' }, stockLabel),
-        active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
-        mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
-        // The opponent's label shares its line with the connection status and the
-        // buttons, so the table needs no bar of its own above it.
-        mine ? null : this.#statusEl(),
-        mine ? null : this.#tools(),
+        h('div', { class: 'seat__who' },
+          h('span', { class: 'seat__name' }, mine ? 'You' : player.name),
+          h('span', { class: 'seat__meta' }, stockLabel),
+          active ? h('span', { class: 'seat__turn' }, mine ? 'your turn' : 'playing') : null,
+          mine ? h('span', { class: 'seat__hint', 'data-set-hint': true }) : null,
+        ),
+        mine ? null : h('div', { class: 'seat__side' }, this.#statusEl(), this.#tools()),
       ),
       mine ? [piles, this.#hand(player, p, canAct)] : [this.#hiddenHand(player, p), piles],
     );
@@ -263,36 +265,30 @@ export class Board {
 
   /**
    * Each seat grows with its longest discard pile into the free space between it and
-   * the middle of the table. A pile that needs more room than that fans tighter. When
-   * both seats need more than there is, each gets half, plus what the other leaves.
+   * the middle of the table, which stays in place. A pile that needs more room than
+   * that fans tighter.
    */
   #fitDiscards() {
     const table = this.root.querySelector('.table');
     const center = table?.querySelector('.center');
-    const rows = [...(table?.querySelectorAll('.discards') ?? [])];
-    if (!center || !rows.length) return;
-    for (const row of rows) spreadDiscards(row, 0);
+    const seats = [...(table?.querySelectorAll('.seat') ?? [])];
+    if (!center || !seats.length) return;
+    for (const seat of seats) spreadDiscards(seat.querySelector('.discards'), 0);
 
-    const cardHeight = rows[0].firstElementChild.getBoundingClientRect().height;
+    const cardHeight = seats[0].querySelector('.slot--discard').getBoundingClientRect().height;
     if (!cardHeight) return;
-    // The table spaces its rows apart, so all room beyond its gaps is free.
+    // Each seat keeps to the edge of its half of the table, so all room between it and
+    // the middle, beyond the table's gap, is free.
     const gap = parseFloat(getComputedStyle(table).rowGap) || 0;
     const middle = center.getBoundingClientRect();
-    let free = 0;
-    for (const seat of table.querySelectorAll('.seat')) {
+    const rooms = seats.map((seat) => {
       const rect = seat.getBoundingClientRect();
-      free += Math.max(0, (rect.bottom <= middle.top ? middle.top - rect.bottom : rect.top - middle.bottom) - gap);
-    }
-
-    const needs = rows.map((row) => {
+      const free = Math.max(0, (rect.bottom <= middle.top ? middle.top - rect.bottom : rect.top - middle.bottom) - gap);
+      const row = seat.querySelector('.discards');
       const longest = Math.max(...[...row.children].map((slot) => slot.querySelectorAll('.card').length));
-      return { row, need: Math.max(0, MAX_FAN * (longest - 1)) * cardHeight };
-    }).sort((a, b) => a.need - b.need);
-    needs.forEach(({ row, need }, i) => {
-      const room = Math.min(need, Math.floor(free / (needs.length - i)));
-      free -= room;
-      spreadDiscards(row, room / cardHeight);
+      return { row, room: Math.floor(Math.min(free, Math.max(0, MAX_FAN * (longest - 1)) * cardHeight)) };
     });
+    for (const { row, room } of rooms) spreadDiscards(row, room / cardHeight);
   }
 
   #hand(player, p, canAct) {
